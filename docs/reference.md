@@ -1,5 +1,7 @@
 # claude-keysmith 运行时参考
 
+日常使用只需要 [`README.md`](../README.md) 的「快速开始」；本页是 import block、runtime wrapper、settings 对齐、journal 与维护者验证细节。JSON 契约见 [`json-contract.md`](json-contract.md)，事务恢复见 [`transaction-recovery.md`](transaction-recovery.md)，Desktop 见 [`desktop-gui.md`](desktop-gui.md)。
+
 `claude-keysmith` 管理 Claude Code 的两层持久化指令入口：import block 与可选 user-scope runtime wrapper。所有写入默认需要显式 `--yes`；没有 `--yes` 时命令只预览。
 
 ## import-block 层
@@ -33,7 +35,13 @@
 
 在 macOS / Linux 上，wrapper 是 `claude()` shell 函数；在 Windows PowerShell 上，wrapper 是 profile 中的 `function global:claude`。自 v6 起正式支持 Windows PowerShell 5.1 与 PowerShell 7；CMD 和 Git Bash 不属于 managed wrapper 支持范围。
 
-Windows profile 解析从实际用户级 `PSModulePath` 的首个可识别条目派生：条目中的 `WindowsPowerShell/Modules` 对应 Windows PowerShell 5.1 profile，`PowerShell/Modules` 对应 PowerShell 7 profile，并保留该条目前缀，因此支持重定向后的 Documents 目录。全新环境中，即使 `PSModulePath` 已声明的用户 `Modules` 目录尚未创建，也会按路径结构识别；没有可识别条目时，安装会停止并要求通过 `CLAUDE_KEYSMITH_SHELL_RC` 指定目标 profile，不会回退猜测。
+Windows profile 解析顺序：
+
+1. `$CLAUDE_KEYSMITH_SHELL_RC` 显式覆盖。
+2. 实际用户级 `PSModulePath` 的首个可识别条目：`WindowsPowerShell/Modules` → Windows PowerShell 5.1，`PowerShell/Modules` → PowerShell 7，并保留该条目前缀（支持重定向后的 Documents）。全新环境中，即使该 `Modules` 目录尚未创建，也会按路径结构识别。
+3. 若当前进程没有用户级 `PSModulePath`（Desktop sidecar / 资源管理器启动的 GUI 常见：变量为空，或只剩 Program Files / System32），回退到用户 Documents 目录：优先已存在的 `Microsoft.PowerShell_profile.ps1`（先 WindowsPowerShell 5.1，再 PowerShell 7），否则目标为 Win10 默认的 `Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`。当 *home* 就是当前 Windows 用户配置目录（`USERPROFILE` / `Path.home()`）时，Documents 按 Known Folder / 用户壳文件夹注册表解析，因此 OneDrive 重定向可用；`CLAUDE_KEYSMITH_HOME` 或测试夹具只使用该 home 下的 `Documents` / `文档`，不会写到机器上另一个用户的 profile。
+
+仍可用 `$CLAUDE_KEYSMITH_SHELL_RC` 指定 PS7 或其他非默认 profile。
 
 可选环境变量覆盖：
 
@@ -141,14 +149,14 @@ runtime status 保留已有字段，并增加：
 | `upstream_candidates` | Windows 动态解析候选；每项包含 `kind`、`path`、`exists`、`eligible`、`reason` |
 | `upstream_path` | 当前选中的上游入口；没有可用入口时为空 |
 | `upstream_exists` | 当前是否至少有一个可启动的上游入口 |
-| `shell_wrapper_current` | profile 中的 managed wrapper 是否匹配 v7.1 当前模板 |
+| `shell_wrapper_current` | profile 中的 managed wrapper 是否匹配 v7.2 当前模板 |
 | `legacy_launcher_detected` | 是否发现尚未迁移的旧 Windows launcher |
 | `legacy_launcher_paths` | 发现的旧 launcher 路径列表 |
 | `legacy_launcher_conflict` | 是否发现所有权无法确认的同名 Windows launcher |
 | `legacy_launcher_conflict_paths` | 发生所有权冲突的 launcher 路径列表 |
 | `upgrade_required` | 当前 runtime 是否需要重新安装或迁移 |
 
-`runtime_ready` 只有在 system/append prompt 文件完整、settings 对齐、managed wrapper 匹配 v7.1 当前模板、至少一个上游入口存在，并且没有未迁移或冲突的旧 launcher 时才为 `true`。它不表示某个特定 CLI 会话、模型提供方或 API 网关一定会以预期方式处理请求。
+`runtime_ready` 只有在 system/append prompt 文件完整、settings 对齐、managed wrapper 匹配 v7.2 当前模板、至少一个上游入口存在，并且没有未迁移或冲突的旧 launcher 时才为 `true`。它不表示某个特定 CLI 会话、模型提供方或 API 网关一定会以预期方式处理请求。
 
 `doctor` 仅报告安装类型、相关路径、上游候选拒绝原因和建议的修复动作。它不会在文本、stderr 或 JSON 中回显 Base URL、token、cookie 等潜在凭证。
 
